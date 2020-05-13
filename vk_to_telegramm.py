@@ -200,19 +200,19 @@ def post_data(**data):
     type = data.get('type', 'main')
     images = data.get('images',[])
     text = data.get('text','')
-    body = {'type': type, 'pic': False, 'body': text }
-        if len(images) > 1:
-            image_urls = list(map(lambda img: max(
-                img["sizes"], key=lambda size: size["type"])["url"], images))
-            print(image_urls)
-            bot.send_media_group(CHANNEL, map(
-                lambda url: InputMediaPhoto(url), image_urls))
-            send_posts_text(**body)
-        elif len(images) == 1:
-            body['pic'] = True
-            send_posts_img(**body)
-        else:
-            send_posts_text(**body)
+    body = {'type': type, 'pic': False, 'body': text, 'images': images }
+    if len(images) > 1:
+        image_urls = list(map(lambda img: max(
+            img["sizes"], key=lambda size: size["type"])["url"], images))
+        print(image_urls)
+        bot.send_media_group(CHANNEL, map(
+            lambda url: InputMediaPhoto(url), image_urls))
+        send_posts_text(**body)
+    elif len(images) == 1:
+        body['pic'] = True
+        send_posts_img(**body)
+    else:
+        send_posts_text(**body)
 
 # Текст
 def send_posts_text( **data):
