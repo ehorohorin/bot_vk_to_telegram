@@ -30,6 +30,7 @@ for o, a in opts:
 config_path = os.path.join(sys.path[0], CONFIG_FILE)
 config = configparser.ConfigParser()
 config.read(config_path)
+
 LOGIN = config.get('VK', 'LOGIN')
 PASSWORD = config.get('VK', 'PASSWORD')
 DOMAIN = config.get('VK', 'DOMAIN')
@@ -37,20 +38,24 @@ COUNT = config.get('VK', 'COUNT')
 VK_TOKEN = config.get('VK', 'TOKEN', fallback=None)
 BOT_TOKEN = config.get('Telegram', 'BOT_TOKEN')
 CHANNEL = config.get('Telegram', 'CHANNEL')
+TIMEOUT = int(config.get('Telegram', 'TIMEOUT'))
 INCLUDE_LINK = config.getboolean('Settings', 'INCLUDE_LINK')
 PREVIEW_LINK = config.getboolean('Settings', 'PREVIEW_LINK')
 
-DELIMETER = None
-if 'DELIMETER' in config['Telegram']:
-    DELIMETER = config.get('Telegram', 'DELIMETER')
+DELIMITER = None
+REPOST_DELIMITER = None
+if 'DELIMITER' in config['Telegram']:
+    DELIMITER = config.get('Telegram', 'DELIMITER')
+
+if 'REPOST_DELIMITER' in config['Telegram']:
+    REPOST_DELIMITER = config.get('Telegram', 'REPOST_DELIMITER')
+
 
 # Символы, на которых можно разбить сообщение
 message_breakers = [':', ' ', '\n']
-max_message_length = 4091
-max_capt_length = 1024
+max_message_length = int(config.get('Telegram', 'MAX_TEXT'))
+#max_capt_length = 1024
 
-delim = '\n***********************************'
-rep_delim = '\n------конец репоста-----------------'
 # Инициализируем телеграмм бота
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -141,8 +146,7 @@ def check_posts_vk():
                 str(post['owner_id']) + '_' + str(post['id'])
             links.insert(0, post_url)
         text = '\n'.join([text] + links)
-        data = {'type':'main', 'images': images, 'text': text}
-        post_data(**data)
+        main_data = {'type':'main', 'images': images, 'text': text}
 
 
         # Проверяем есть ли репост другой записи
@@ -179,17 +183,18 @@ def check_posts_vk():
                     att_imgs.append(img)
 
             text = '\n'.join([copy_history['text']] + lnk_text)
-            data = {'type':'repost', 'images': att_imgs, 'text': text}
-            post_data(**data)
+            repost_data = {'type':'repost', 'images': att_imgs, 'text': text}
 
+            for data in [repost_data, main_data]:
+                post_data(**data)
+
+        # NOTE: new feature is in progress
         # Записываем id в файл
         config.set('Settings', 'LAST_ID', str(post['id']))
         with open(config_path, "w") as config_file:
             config.write(config_file)
 
-        if DELIMETER is not None:
-            send_posts_text(DELIMETER)
-        time.sleep(15)
+
 
 
 # Отправляем посты в телеграмм
@@ -207,12 +212,15 @@ def post_data(**data):
         print(image_urls)
         bot.send_media_group(CHANNEL, map(
             lambda url: InputMediaPhoto(url), image_urls))
-        send_posts_text(**body)
-    elif len(images) == 1:
+
+    if len(images) == 1:
         body['pic'] = True
         send_posts_img(**body)
-    else:
-        send_posts_text(**body)
+
+    send_posts_text(**body)
+
+    # Prevent DDoS block
+    time.sleep(TIMEOUT)
 
 # Текст
 def send_posts_text( **data):
@@ -228,13 +236,11 @@ def send_posts_text( **data):
         bot.send_message(CHANNEL, msg, disable_web_page_preview=not PREVIEW_LINK)
 
 def set_delim(type):
-    global delim
-    global rep_delim
 
     if type == 'main':
-        return delim
+        return DELIMITER
     elif type == 'repost':
-        return rep_delim
+        return REPOST_DELIMITER
     else:
         return None
 
@@ -251,13 +257,14 @@ def split(**message):
     type = message.get('type', 'main')
     text = message.get('body')
 
-    if message.get('pic', False):
-        max_length = max_capt_length
-    else:
-        max_length = max_message_length
+    #if message.get('pic', False):
+    #    max_length = max_capt_length
+    #else:
+    #    max_length = max_message_length
 
-    delim = set_delim(type)
-    text = text + delim
+    max_length = max_message_length
+    delimiter = set_delim(type)
+    text = text + '\n' + delimiter
 
     if len(text) >= max_length:
         last_index = max(
@@ -277,8 +284,9 @@ def send_posts_img(**object):
     # Находим картинку с максимальным качеством
     url = max(img["sizes"], key=lambda size: size["type"])["url"]
 
-    caption = split(**object)[0]
-    bot.send_photo(CHANNEL, url, caption)
+    #caption = split(**object)
+    #bot.send_photo(CHANNEL, url, caption)
+    bot.send_photo(CHANNEL, url)
 
 
 if __name__ == '__main__':
